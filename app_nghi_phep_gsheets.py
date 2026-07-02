@@ -4,7 +4,7 @@ import requests
 import json
 import base64
 from datetime import datetime, timedelta
-
+import time
 # --- CẤU HÌNH TRANG WEB ---
 st.set_page_config(
     page_title="Hệ Thống Đăng Ký Nghỉ Phép Tuần",
@@ -137,6 +137,11 @@ with tab1:
                 
                 if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
                     st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công!")
+                    
+                    # Hiện thông báo đếm ngược hoặc chờ xử lý cho người dùng thấy
+                    with st.spinner("🔄 Đang đồng bộ dữ liệu với hệ thống, vui lòng chờ trong giây lát..."):
+                        time.sleep(2)  # Dừng app đúng 2 giây để GitHub cập nhật file
+                
                     st.rerun()
                 else:
                     st.error("❌ Lỗi hệ thống khi lưu trữ vào GitHub. Hãy thử lại!")
@@ -175,6 +180,11 @@ with tab2:
                 
                 if save_github_data(list_to_save, current_sha, f"Huy lich STT {stt_can_xoa}"):
                     st.success("✅ Đã hủy lịch nghỉ phép thành công!")
+                    
+                    # Dừng 2 giây chờ GitHub đồng bộ file xóa
+                    with st.spinner("🔄 Đang cập nhật lại danh sách công khai..."):
+                        time.sleep(2)
+                        
                     st.rerun()
                 else:
                     st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
