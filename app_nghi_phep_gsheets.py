@@ -20,7 +20,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # Hàm đọc và đồng bộ dữ liệu + Tự động dọn dẹp vào 0h Thứ 2
 def load_and_sync_data():
     # Đọc dữ liệu từ Sheet1, đặt ttl=0 để luôn lấy dữ liệu mới nhất, tránh lưu cache cũ
-    df = conn.read(worksheet="Sheet1", ttl=0)
+    df = conn.read(ttl=0)
     
     # Chuẩn hóa dữ liệu nếu sheet hoàn toàn trống (chỉ có tiêu đề) hoặc bị lỗi
     if df.empty or "Ngay_Dang_Ky" not in df.columns:
