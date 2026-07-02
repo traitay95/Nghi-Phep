@@ -5,6 +5,7 @@ import json
 import base64
 from datetime import datetime, timedelta
 import time
+
 # --- CẤU HÌNH TRANG WEB ---
 st.set_page_config(
     page_title="Hệ Thống Đăng Ký Nghỉ Phép Tuần",
@@ -91,14 +92,14 @@ df_list, current_sha = load_and_sync_data()
 
 # --- KIỂM TRA THỨ TRONG TUẦN (MÚI GIỜ VN) ---
 now_vn = datetime.utcnow() + timedelta(hours=7)
-thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, 5: Thứ 7, 6: Chủ Nhật
-la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # True nếu là Thứ 6, 7, CN
+thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
+la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
 # --- GIAO DIỆN ỨNG DỤNG ---
 tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
 
 # ==============================================================================
-# TAB 1: ĐĂNG KÝ NGHỈ PHÉP
+# TAB 1: ĐĂNG KÝ NGHỈ PHÉP (HỖ TRỢ NHIỀU NGÀY)
 # ==============================================================================
 with tab1:
     st.subheader("Điền thông tin đăng ký")
@@ -109,18 +110,39 @@ with tab1:
     with st.form(key="form_dang_ky", clear_on_submit=True):
         ho_ten = st.text_input("1. Họ và Tên:", disabled=la_ngay_khoa).strip()
         khoa_phong = st.text_input("2. Khoa/Phòng / Vị trí làm việc:", disabled=la_ngay_khoa).strip()
-        ngay_nghi = st.date_input("3. Chọn Ngày nghỉ phép:", min_value=now_vn.date(), disabled=la_ngay_khoa)
+        
+        # Thay đổi st.date_input để cho phép chọn một khoảng ngày (Tuple: bắt đầu, kết thúc)
+        st.markdown("**3. Chọn Ngày nghỉ phép:** *(Bấm 2 lần để chọn Ngày bắt đầu và Ngày kết thúc)*")
+        khoang_ngay = st.date_input(
+            "Chọn khoảng ngày nghỉ:",
+            value=(now_vn.date(), now_vn.date()),
+            min_value=now_vn.date(),
+            disabled=la_ngay_khoa,
+            label_visibility="collapsed"
+        )
+        
         mat_khau = st.text_input("4. Mật khẩu chỉnh sửa (Dùng để hủy nếu đổi ý):", type="password", disabled=la_ngay_khoa).strip()
         
         submit_button = st.form_submit_button(label="Gửi Đăng Ký", disabled=la_ngay_khoa)
         
         if submit_button and not la_ngay_khoa:
+            # Kiểm tra xem người dùng đã chọn đầy đủ ngày bắt đầu và ngày kết thúc chưa
             if not ho_ten or not khoa_phong or not mat_khau:
                 st.error("⚠️ Vui lòng điền đầy đủ tất cả các mục thông tin!")
+            elif isinstance(khoang_ngay, tuple) and len(khoang_ngay) < 2:
+                st.error("⚠️ Vui lòng chọn đầy đủ cả Ngày bắt đầu và Ngày kết thúc nghỉ phép!")
             else:
                 stt_moi = len(df_list) + 1
-                ngay_nghi_str = ngay_nghi.strftime("%d/%m/%Y")
-                # Ghi nhận chính xác ngày giờ đăng ký theo giờ VN
+                
+                # Định dạng chuỗi hiển thị ngày nghỉ
+                ngay_dau = khoang_ngay[0].strftime("%d/%m/%Y")
+                ngay_cuoi = khoang_ngay[1].strftime("%d/%m/%Y")
+                
+                if ngay_dau == ngay_cuoi:
+                    ngay_nghi_str = ngay_dau  # Nghỉ 1 ngày duy nhất
+                else:
+                    ngay_nghi_str = f"{ngay_dau} ➔ {ngay_cuoi}"  # Nghỉ nhiều ngày
+                
                 ngay_tao_str = now_vn.strftime("%Y-%m-%d %H:%M:%S")
                 
                 new_row = pd.DataFrame([{
@@ -136,12 +158,10 @@ with tab1:
                 list_to_save = df_updated.to_dict(orient="records")
                 
                 if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
-                    st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công!")
+                    st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công ({ngay_nghi_str})!")
                     
-                    # Hiện thông báo đếm ngược hoặc chờ xử lý cho người dùng thấy
-                    with st.spinner("🔄 Đang đồng bộ dữ liệu với hệ thống, vui lòng chờ trong giây lát..."):
-                        time.sleep(2)  # Dừng app đúng 2 giây để GitHub cập nhật file
-                
+                    with st.spinner("🔄 Đang đồng bộ dữ liệu với hệ thống, vui lòng chờ..."):
+                        time.sleep(2)
                     st.rerun()
                 else:
                     st.error("❌ Lỗi hệ thống khi lưu trữ vào GitHub. Hãy thử lại!")
@@ -160,7 +180,7 @@ with tab2:
     else:
         danh_sach_chon = []
         for idx, row in df_list.iterrows():
-            danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - Ngày {row['Ngay_Nghi']})")
+            danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - {row['Ngay_Nghi']})")
             
         lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, disabled=la_ngay_khoa)
         mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
@@ -181,10 +201,8 @@ with tab2:
                 if save_github_data(list_to_save, current_sha, f"Huy lich STT {stt_can_xoa}"):
                     st.success("✅ Đã hủy lịch nghỉ phép thành công!")
                     
-                    # Dừng 2 giây chờ GitHub đồng bộ file xóa
                     with st.spinner("🔄 Đang cập nhật lại danh sách công khai..."):
                         time.sleep(2)
-                        
                     st.rerun()
                 else:
                     st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
@@ -200,12 +218,11 @@ if not df_list.empty:
     df_hien_thi = df_hien_thi.rename(columns={
         "Ho_Ten": "Họ và Tên",
         "Khoa_Phong": "Khoa/Phòng",
-        "Ngay_Nghi": "Ngày nghỉ phép",
+        "Ngay_Nghi": "Thời gian nghỉ phép",
         "Ngay_Dang_Ky": "Ngày giờ đăng ký"
     })
-    # Hiển thị thêm cột Ngày giờ đăng ký ra bảng công khai để mọi người theo dõi
     st.dataframe(
-        df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Ngày nghỉ phép", "Ngày giờ đăng ký"]], 
+        df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Thời gian nghỉ phép", "Ngày giờ đăng ký"]], 
         use_container_width=True, 
         hide_index=True
     )
