@@ -17,7 +17,7 @@ st.markdown("---")
 
 # --- THÔNG TIN CẤU HÌNH GITHUB API ---
 GITHUB_TOKEN = st.secrets["github"]["token"]
-REPO_NAME = st.secrets["github"]["repo"]  # Định dạng: "username/repo"
+REPO_NAME = st.secrets["github"]["repo"]
 FILE_PATH = "data_nghi_phep.json"
 API_URL = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
 HEADERS = {
@@ -31,12 +31,10 @@ def get_github_data():
     response = requests.get(API_URL, headers=HEADERS)
     if response.status_code == 200:
         file_data = response.json()
-        # GitHub mã hóa nội dung file bằng base64, cần giải mã ra string
         content = base64.b64decode(file_data["content"]).decode("utf-8")
-        sha = file_data["sha"] # Giữ lại mã SHA để dùng khi cập nhật file
+        sha = file_data["sha"]
         return json.loads(content), sha
     else:
-        # Nếu chưa có file, tự tạo bảng trống
         return [], None
 
 def save_github_data(data, sha, commit_message="Update data"):
@@ -63,8 +61,8 @@ def load_and_sync_data():
         df = pd.DataFrame(columns=["STT", "Ho_Ten", "Khoa_Phong", "Ngay_Nghi", "Mat_Khau", "Ngay_Dang_Ky"])
         return df, sha
 
-    # 🔄 LOGIC TỰ ĐỘNG XOÁ DỮ LIỆU TUẦN CŨ (0h Thứ 2)
-    today = datetime.now()
+    # Lấy thời gian chuẩn theo múi giờ Việt Nam (UTC+7)
+    today = datetime.utcnow() + timedelta(hours=7)
     start_of_week = today - timedelta(days=today.weekday())
     start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
     
@@ -80,10 +78,8 @@ def load_and_sync_data():
         else:
             df_tuan_nay = pd.DataFrame(columns=["STT", "Ho_Ten", "Khoa_Phong", "Ngay_Nghi", "Mat_Khau", "Ngay_Dang_Ky"])
             
-        # Lưu lại bản sạch lên GitHub
-        new_list = df_tuan_nay.to_dict(orient="records")
-        save_github_data(new_list, sha, "Auto clear tuần cũ")
-        # Đọc lại để lấy mã SHA mới nhất
+        list_to_save = df_tuan_nay.to_dict(orient="records")
+        save_github_data(list_to_save, sha, "Auto clear tuần cũ")
         _, new_sha = get_github_data()
         return df_tuan_nay, new_sha
 
@@ -93,6 +89,11 @@ def load_and_sync_data():
 # Tải dữ liệu về biến toàn cục của App
 df_list, current_sha = load_and_sync_data()
 
+# --- KIỂM TRA THỨ TRONG TUẦN (MÚI GIỜ VN) ---
+now_vn = datetime.utcnow() + timedelta(hours=7)
+thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, 5: Thứ 7, 6: Chủ Nhật
+la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # True nếu là Thứ 6, 7, CN
+
 # --- GIAO DIỆN ỨNG DỤNG ---
 tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
 
@@ -101,21 +102,26 @@ tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ
 # ==============================================================================
 with tab1:
     st.subheader("Điền thông tin đăng ký")
+    
+    if la_ngay_khoa:
+        st.error("🔒 Hệ thống đã khóa chức năng ĐĂNG KÝ vào Thứ 6, Thứ 7 và Chủ Nhật.")
+    
     with st.form(key="form_dang_ky", clear_on_submit=True):
-        ho_ten = st.text_input("1. Họ và Tên:").strip()
-        khoa_phong = st.text_input("2. Khoa/Phòng / Vị trí làm việc:").strip()
-        ngay_nghi = st.date_input("3. Chọn Ngày nghỉ phép:", min_value=datetime.now().date())
-        mat_khau = st.text_input("4. Mật khẩu chỉnh sửa (Dùng để hủy nếu đổi ý):", type="password").strip()
+        ho_ten = st.text_input("1. Họ và Tên:", disabled=la_ngay_khoa).strip()
+        khoa_phong = st.text_input("2. Khoa/Phòng / Vị trí làm việc:", disabled=la_ngay_khoa).strip()
+        ngay_nghi = st.date_input("3. Chọn Ngày nghỉ phép:", min_value=now_vn.date(), disabled=la_ngay_khoa)
+        mat_khau = st.text_input("4. Mật khẩu chỉnh sửa (Dùng để hủy nếu đổi ý):", type="password", disabled=la_ngay_khoa).strip()
         
-        submit_button = st.form_submit_button(label="Gửi Đăng Ký")
+        submit_button = st.form_submit_button(label="Gửi Đăng Ký", disabled=la_ngay_khoa)
         
-        if submit_button:
+        if submit_button and not la_ngay_khoa:
             if not ho_ten or not khoa_phong or not mat_khau:
                 st.error("⚠️ Vui lòng điền đầy đủ tất cả các mục thông tin!")
             else:
                 stt_moi = len(df_list) + 1
                 ngay_nghi_str = ngay_nghi.strftime("%d/%m/%Y")
-                ngay_tao_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Ghi nhận chính xác ngày giờ đăng ký theo giờ VN
+                ngay_tao_str = now_vn.strftime("%Y-%m-%d %H:%M:%S")
                 
                 new_row = pd.DataFrame([{
                     "STT": stt_moi,
@@ -127,7 +133,6 @@ with tab1:
                 }])
                 
                 df_updated = pd.concat([df_list, new_row], ignore_index=True)
-                # Chuyển dataframe thành list dict để lưu vào file JSON
                 list_to_save = df_updated.to_dict(orient="records")
                 
                 if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
@@ -141,6 +146,10 @@ with tab1:
 # ==============================================================================
 with tab2:
     st.subheader("Xóa lịch đăng ký nghỉ phép")
+    
+    if la_ngay_khoa:
+        st.error("🔒 Hệ thống đã khóa chức năng XÓA/HỦY lịch nghỉ vào Thứ 6, Thứ 7 và Chủ Nhật.")
+        
     if df_list.empty:
         st.info("Hiện chưa có ai đăng ký nghỉ phép trong tuần này.")
     else:
@@ -148,19 +157,17 @@ with tab2:
         for idx, row in df_list.iterrows():
             danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - Ngày {row['Ngay_Nghi']})")
             
-        lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon)
-        mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password").strip()
+        lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, disabled=la_ngay_khoa)
+        mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
         
-        btn_xoa = st.button("Xác Nhận Hủy Lịch Nghỉ", type="primary")
+        btn_xoa = st.button("Xác Nhận Hủy Lịch Nghỉ", type="primary", disabled=la_ngay_khoa)
         
-        if btn_xoa:
+        if btn_xoa and not la_ngay_khoa:
             stt_can_xoa = int(lua_chon_xoa.split(" ")[1])
             mat_khach_dung = str(df_list.loc[df_list['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
             
             if mat_khau_nhap == mat_khach_dung:
-                # Lọc bỏ dòng cần xóa
                 df_list = df_list[df_list['STT'] != stt_can_xoa]
-                # Đánh lại số thứ tự
                 if not df_list.empty:
                     df_list['STT'] = range(1, len(df_list) + 1)
                 
@@ -183,10 +190,12 @@ if not df_list.empty:
     df_hien_thi = df_hien_thi.rename(columns={
         "Ho_Ten": "Họ và Tên",
         "Khoa_Phong": "Khoa/Phòng",
-        "Ngay_Nghi": "Ngày nghỉ phép"
+        "Ngay_Nghi": "Ngày nghỉ phép",
+        "Ngay_Dang_Ky": "Ngày giờ đăng ký"
     })
+    # Hiển thị thêm cột Ngày giờ đăng ký ra bảng công khai để mọi người theo dõi
     st.dataframe(
-        df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Ngày nghỉ phép"]], 
+        df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Ngày nghỉ phép", "Ngày giờ đăng ký"]], 
         use_container_width=True, 
         hide_index=True
     )
