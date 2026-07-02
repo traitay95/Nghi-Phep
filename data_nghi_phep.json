@@ -1,1 +1,10 @@
-[]
+[
+    {
+        "STT": 1,
+        "Ho_Ten": "Nguyễn Minh Nhân",
+        "Khoa_Phong": "KHNV",
+        "Ngay_Nghi": "08/07/2026",
+        "Mat_Khau": "1234",
+        "Ngay_Dang_Ky": "2026-07-02 08:45:26"
+    }
+]
