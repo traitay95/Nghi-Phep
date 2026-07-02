@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
+import requests
+import json
+import base64
 from datetime import datetime, timedelta
-import gspread
 
 # --- CẤU HÌNH TRANG WEB ---
 st.set_page_config(
@@ -13,70 +15,90 @@ st.set_page_config(
 st.title("📅 Đăng Ký Nghỉ Phép Trực Tuyến")
 st.markdown("---")
 
-# --- KẾT NỐI GOOGLE SHEETS BẰNG GSPREAD ---
-def get_google_sheet():
-    # Sử dụng link cấu hình từ mục Secrets để khởi tạo kết nối thông qua gspread công khai
-    sheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+# --- THÔNG TIN CẤU HÌNH GITHUB API ---
+GITHUB_TOKEN = st.secrets["github"]["token"]
+REPO_NAME = st.secrets["github"]["repo"]  # Định dạng: "username/repo"
+FILE_PATH = "data_nghi_phep.json"
+API_URL = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
+HEADERS = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json"
+}
+
+# --- CÁC HÀM XỬ LÝ DATABASE GITHUB ---
+def get_github_data():
+    """Đọc dữ liệu file JSON từ GitHub về ứng dụng"""
+    response = requests.get(API_URL, headers=HEADERS)
+    if response.status_code == 200:
+        file_data = response.json()
+        # GitHub mã hóa nội dung file bằng base64, cần giải mã ra string
+        content = base64.b64decode(file_data["content"]).decode("utf-8")
+        sha = file_data["sha"] # Giữ lại mã SHA để dùng khi cập nhật file
+        return json.loads(content), sha
+    else:
+        # Nếu chưa có file, tự tạo bảng trống
+        return [], None
+
+def save_github_data(data, sha, commit_message="Update data"):
+    """Ghi đè/Đẩy dữ liệu mới lên lại GitHub"""
+    content_str = json.dumps(data, indent=4, ensure_ascii=False)
+    content_encoded = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
     
-    # Kết nối ẩn danh thông qua client gspread công khai được mở quyền Editor
-    gc = gspread.public()
-    # Mở file và trỏ thẳng vào Trang tính đầu tiên (Sheet1)
-    sh = gc.open_by_url(sheet_url)
-    return sh.sheet1
+    payload = {
+        "message": commit_message,
+        "content": content_encoded,
+    }
+    if sha:
+        payload["sha"] = sha
+        
+    response = requests.put(API_URL, headers=HEADERS, json=payload)
+    return response.status_code in [200, 201]
 
-try:
-    wks = get_google_sheet()
-except Exception as e:
-    st.error("⚠️ Không thể kết nối tới Google Sheets. Vui lòng kiểm tra lại quyền Chia sẻ (Editor) hoặc link trong Secrets!")
-    st.stop()
-
-# Hàm đọc và đồng bộ dữ liệu + Tự động dọn dẹp vào 0h Thứ 2
+# --- ĐỒNG BỘ VÀ TỰ ĐỘNG CLEAR DỮ LIỆU THỨ 2 ---
 def load_and_sync_data():
-    # Đọc toàn bộ dữ liệu từ Sheets về
-    records = wks.get_all_records()
-    df = pd.DataFrame(records)
+    raw_data, sha = get_github_data()
+    df = pd.DataFrame(raw_data)
     
-    # Chuẩn hóa nếu bảng trống
     if df.empty or "Ngay_Dang_Ky" not in df.columns:
         df = pd.DataFrame(columns=["STT", "Ho_Ten", "Khoa_Phong", "Ngay_Nghi", "Mat_Khau", "Ngay_Dang_Ky"])
-        return df
+        return df, sha
 
-    # Loại bỏ dòng trống
-    df = df.dropna(subset=["Ho_Ten"])
+    # 🔄 LOGIC TỰ ĐỘNG XOÁ DỮ LIỆU TUẦN CŨ (0h Thứ 2)
+    today = datetime.now()
+    start_of_week = today - timedelta(days=today.weekday())
+    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    if not df.empty:
-        # 🔄 LOGIC TỰ ĐỘNG XOÁ DỮ LIỆU TUẦN CŨ (0h Thứ 2)
-        today = datetime.now()
-        start_of_week = today - timedelta(days=today.weekday())
-        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    df['Ngay_Dang_Ky_DT'] = pd.to_datetime(df['Ngay_Dang_Ky'], errors='coerce', format='%Y-%m-%d %H:%M:%S')
+    dong_tuan_cu = df[df['Ngay_Dang_Ky_DT'] < start_of_week]
+    
+    if not dong_tuan_cu.empty:
+        df_tuan_nay = df[df['Ngay_Dang_Ky_DT'] >= start_of_week].copy()
+        df_tuan_nay = df_tuan_nay.drop(columns=['Ngay_Dang_Ky_DT'])
         
-        df['Ngay_Dang_Ky_DT'] = pd.to_datetime(df['Ngay_Dang_Ky'], errors='coerce', format='%Y-%m-%d %H:%M:%S')
-        dong_tuan_cu = df[df['Ngay_Dang_Ky_DT'] < start_of_week]
-        
-        if not dong_tuan_cu.empty:
-            df_tuan_nay = df[df['Ngay_Dang_Ky_DT'] >= start_of_week].copy()
-            df_tuan_nay = df_tuan_nay.drop(columns=['Ngay_Dang_Ky_DT'])
+        if not df_tuan_nay.empty:
+            df_tuan_nay['STT'] = range(1, len(df_tuan_nay) + 1)
+        else:
+            df_tuan_nay = pd.DataFrame(columns=["STT", "Ho_Ten", "Khoa_Phong", "Ngay_Nghi", "Mat_Khau", "Ngay_Dang_Ky"])
             
-            if not df_tuan_nay.empty:
-                df_tuan_nay['STT'] = range(1, len(df_tuan_nay) + 1)
-            else:
-                df_tuan_nay = pd.DataFrame(columns=["STT", "Ho_Ten", "Khoa_Phong", "Ngay_Nghi", "Mat_Khau", "Ngay_Dang_Ky"])
-                
-            # Ghi đè lại dữ liệu sạch lên Sheets bằng cách xóa hết rồi gieo lại dòng tiêu đề + data
-            wks.clear()
-            wks.update([df_tuan_nay.columns.values.tolist()] + df_tuan_nay.values.tolist())
-            return df_tuan_nay
+        # Lưu lại bản sạch lên GitHub
+        new_list = df_tuan_nay.to_dict(orient="records")
+        save_github_data(new_list, sha, "Auto clear tuần cũ")
+        # Đọc lại để lấy mã SHA mới nhất
+        _, new_sha = get_github_data()
+        return df_tuan_nay, new_sha
 
-        df = df.drop(columns=['Ngay_Dang_Ky_DT'])
-        
-    return df
+    df = df.drop(columns=['Ngay_Dang_Ky_DT'])
+    return df, sha
 
-df_list = load_and_sync_data()
+# Tải dữ liệu về biến toàn cục của App
+df_list, current_sha = load_and_sync_data()
 
-# --- GIAO DIỆN CHÍNH ---
+# --- GIAO DIỆN ỨNG DỤNG ---
 tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
 
+# ==============================================================================
 # TAB 1: ĐĂNG KÝ NGHỈ PHÉP
+# ==============================================================================
 with tab1:
     st.subheader("Điền thông tin đăng ký")
     with st.form(key="form_dang_ky", clear_on_submit=True):
@@ -95,13 +117,28 @@ with tab1:
                 ngay_nghi_str = ngay_nghi.strftime("%d/%m/%Y")
                 ngay_tao_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # Append dòng mới trực tiếp xuống cuối file Sheets
-                wks.append_row([stt_moi, ho_ten, khoa_phong, ngay_nghi_str, mat_khau, ngay_tao_str])
+                new_row = pd.DataFrame([{
+                    "STT": stt_moi,
+                    "Ho_Ten": ho_ten,
+                    "Khoa_Phong": khoa_phong,
+                    "Ngay_Nghi": ngay_nghi_str,
+                    "Mat_Khau": mat_khau,
+                    "Ngay_Dang_Ky": ngay_tao_str
+                }])
                 
-                st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công!")
-                st.rerun()
+                df_updated = pd.concat([df_list, new_row], ignore_index=True)
+                # Chuyển dataframe thành list dict để lưu vào file JSON
+                list_to_save = df_updated.to_dict(orient="records")
+                
+                if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
+                    st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công!")
+                    st.rerun()
+                else:
+                    st.error("❌ Lỗi hệ thống khi lưu trữ vào GitHub. Hãy thử lại!")
 
+# ==============================================================================
 # TAB 2: HỦY ĐĂNG KÝ
+# ==============================================================================
 with tab2:
     st.subheader("Xóa lịch đăng ký nghỉ phép")
     if df_list.empty:
@@ -118,28 +155,40 @@ with tab2:
         
         if btn_xoa:
             stt_can_xoa = int(lua_chon_xoa.split(" ")[1])
-            mat_khau_dung = str(df_list.loc[df_list['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
+            mat_khach_dung = str(df_list.loc[df_list['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
             
-            if mat_khau_nhap == mat_khau_dung:
+            if mat_khau_nhap == mat_khach_dung:
+                # Lọc bỏ dòng cần xóa
                 df_list = df_list[df_list['STT'] != stt_can_xoa]
+                # Đánh lại số thứ tự
                 if not df_list.empty:
                     df_list['STT'] = range(1, len(df_list) + 1)
                 
-                # Xóa trắng và đồng bộ lại bảng sau khi xóa dòng
-                wks.clear()
-                wks.update([df_list.columns.values.tolist()] + df_list.values.tolist())
-                st.success("✅ Đã hủy lịch nghỉ phép thành công!")
-                st.rerun()
+                list_to_save = df_list.to_dict(orient="records")
+                
+                if save_github_data(list_to_save, current_sha, f"Huy lich STT {stt_can_xoa}"):
+                    st.success("✅ Đã hủy lịch nghỉ phép thành công!")
+                    st.rerun()
+                else:
+                    st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
             else:
                 st.error("❌ Mật khẩu chỉnh sửa không chính xác! Vui lòng kiểm tra lại.")
 
-# --- BẢNG TỔNG HỢP ---
+# --- KHU VỰC HIỂN THỊ BẢNG TỔNG HỢP ---
 st.markdown("---")
 st.subheader("📊 Bảng Tổng Hợp Nghỉ Phép Trong Tuần")
 
 if not df_list.empty:
     df_hien_thi = df_list.copy()
-    df_hien_thi = df_hien_thi.rename(columns={"Ho_Ten": "Họ và Tên", "Khoa_Phong": "Khoa/Phòng", "Ngay_Nghi": "Ngày nghỉ phép"})
-    st.dataframe(df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Ngày nghỉ phép"]], use_container_width=True, hide_index=True)
+    df_hien_thi = df_hien_thi.rename(columns={
+        "Ho_Ten": "Họ và Tên",
+        "Khoa_Phong": "Khoa/Phòng",
+        "Ngay_Nghi": "Ngày nghỉ phép"
+    })
+    st.dataframe(
+        df_hien_thi[["STT", "Họ và Tên", "Khoa/Phòng", "Ngày nghỉ phép"]], 
+        use_container_width=True, 
+        hide_index=True
+    )
 else:
     st.info("Hiện tại chưa có ai đăng ký nghỉ phép trong tuần này.")
