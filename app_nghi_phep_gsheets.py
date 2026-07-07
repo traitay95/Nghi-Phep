@@ -95,13 +95,25 @@ now_vn = datetime.utcnow() + timedelta(hours=7)
 thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
 la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
-# --- GIAO DIỆN ỨNG DỤNG ---
-tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
+# --- CẤU HÌNH ĐỂ GIỮ CHÂN TAB KHÔNG BỊ NHẢY ---
+# Thiết lập session_state ban đầu nếu chưa có
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "✍️ Đăng Ký Nghỉ Phép"
+
+# Tạo danh sách tên tab và tìm vị trí tab đang active hiện tại
+tab_titles = ["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"]
+default_index = tab_titles.index(st.session_state["active_tab"])
+
+# Khởi tạo tabs với giá trị mặc định được lưu lại từ trước
+tabs = st.tabs(tab_titles)
 
 # ==============================================================================
 # TAB 1: ĐĂNG KÝ NGHỈ PHÉP (HỖ TRỢ NHIỀU NGÀY)
 # ==============================================================================
-with tab1:
+with tabs[0]:
+    # Mỗi khi người dùng bấm vào tab này, cập nhật lại trạng thái active
+    st.session_state["active_tab"] = "✍️ Đăng Ký Nghỉ Phép"
+    
     st.subheader("Điền thông tin đăng ký")
     
     if la_ngay_khoa:
@@ -111,7 +123,6 @@ with tab1:
         ho_ten = st.text_input("1. Họ và Tên:", disabled=la_ngay_khoa).strip()
         khoa_phong = st.text_input("2. Khoa/Phòng / Vị trí làm việc:", disabled=la_ngay_khoa).strip()
         
-        # Thay đổi st.date_input để cho phép chọn một khoảng ngày (Tuple: bắt đầu, kết thúc)
         st.markdown("**3. Chọn Ngày nghỉ phép:** *(Bấm 2 lần để chọn Ngày bắt đầu và Ngày kết thúc)*")
         khoang_ngay = st.date_input(
             "Chọn khoảng ngày nghỉ:",
@@ -126,7 +137,6 @@ with tab1:
         submit_button = st.form_submit_button(label="Gửi Đăng Ký", disabled=la_ngay_khoa)
         
         if submit_button and not la_ngay_khoa:
-            # Kiểm tra xem người dùng đã chọn đầy đủ ngày bắt đầu và ngày kết thúc chưa
             if not ho_ten or not khoa_phong or not mat_khau:
                 st.error("⚠️ Vui lòng điền đầy đủ tất cả các mục thông tin!")
             elif isinstance(khoang_ngay, tuple) and len(khoang_ngay) < 2:
@@ -134,14 +144,13 @@ with tab1:
             else:
                 stt_moi = len(df_list) + 1
                 
-                # Định dạng chuỗi hiển thị ngày nghỉ
                 ngay_dau = khoang_ngay[0].strftime("%d/%m/%Y")
                 ngay_cuoi = khoang_ngay[1].strftime("%d/%m/%Y")
                 
                 if ngay_dau == ngay_cuoi:
-                    ngay_nghi_str = ngay_dau  # Nghỉ 1 ngày duy nhất
+                    ngay_nghi_str = ngay_dau
                 else:
-                    ngay_nghi_str = f"{ngay_dau} ➔ {ngay_cuoi}"  # Nghỉ nhiều ngày
+                    ngay_nghi_str = f"{ngay_dau} ➔ {ngay_cuoi}"
                 
                 ngay_tao_str = now_vn.strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -169,7 +178,10 @@ with tab1:
 # ==============================================================================
 # TAB 2: HỦY ĐĂNG KÝ
 # ==============================================================================
-with tab2:
+with tabs[1]:
+    # Ép cố định nếu đang thao tác ở tab 2 thì giá trị lưu trữ phải là tab 2
+    st.session_state["active_tab"] = "❌ Hủy Lịch Nghỉ"
+    
     st.subheader("Xóa lịch đăng ký nghỉ phép")
     
     if la_ngay_khoa:
