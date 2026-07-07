@@ -95,13 +95,32 @@ now_vn = datetime.utcnow() + timedelta(hours=7)
 thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
 la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
-# --- DÙNG LẠI ST.TABS GỐC THEO Ý ANH ---
-tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
+# --- THAY THẾ ST.TABS BẰNG THANH ĐIỀU HƯỚNG CỐ ĐỊNH ---
+# Khởi tạo session state cho menu nếu chưa có
+if "menu_selection" not in st.session_state:
+    st.session_state["menu_selection"] = "✍️ Đăng Ký Nghỉ Phép"
+
+# Tạo thanh chọn tab nằm ngang cố định bằng st.radio kết hợp style ẩn vòng tròn chọn
+st.write(
+    '<style>div.row-widget.stRadio > div{flex-direction:row;background:#f0f2f6;padding:10px;border-radius:10px;} '
+    'div.row-widget.stRadio div label{background:#ffffff;padding:8px 20px;border-radius:5px;margin-right:10px;box-shadow: 1px 1px 3px rgba(0,0,0,0.1);cursor:pointer;}'
+    'div.row-widget.stRadio div label:hover{background:#fafafa;}</style>', 
+    unsafe_allow_html=True
+)
+
+chon_tab = st.radio(
+    "Chọn chức năng:",
+    options=["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"],
+    key="menu_selection",
+    label_visibility="collapsed"
+)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TAB 1: ĐĂNG KÝ NGHỈ PHÉP
 # ==============================================================================
-with tab1:
+if chon_tab == "✍️ Đăng Ký Nghỉ Phép":
     st.subheader("Điền thông tin đăng ký")
     
     if la_ngay_khoa:
@@ -156,6 +175,7 @@ with tab1:
                 
                 if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
                     st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công ({ngay_nghi_str})!")
+                    
                     with st.spinner("🔄 Đang đồng bộ dữ liệu với hệ thống, vui lòng chờ..."):
                         time.sleep(2)
                     st.rerun()
@@ -163,9 +183,9 @@ with tab1:
                     st.error("❌ Lỗi hệ thống khi lưu trữ vào GitHub. Hãy thử lại!")
 
 # ==============================================================================
-# TAB 2: HỦY ĐĂNG KÝ (CÔ LẬP LỖI NHẢY TAB BẰNG ST.FRAGMENT)
+# TAB 2: HỦY ĐĂNG KÝ
 # ==============================================================================
-with tab2:
+elif chon_tab == "❌ Hủy Lịch Nghỉ":
     st.subheader("Xóa lịch đăng ký nghỉ phép")
     
     if la_ngay_khoa:
@@ -174,41 +194,37 @@ with tab2:
     if df_list.empty:
         st.info("Hiện chưa có ai đăng ký nghỉ phép trong tuần này.")
     else:
-        # Tạo vùng Fragment cô lập tiến trình Rerun của Selectbox
-        @st.fragment()
-        def vung_huy_lich_co_lap(df_data, sha_data):
-            danh_sach_chon = []
-            for idx, row in df_data.iterrows():
-                danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - {row['Ngay_Nghi']})")
-                
-            lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, disabled=la_ngay_khoa)
-            mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
+        danh_sach_chon = []
+        for idx, row in df_list.iterrows():
+            danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - {row['Ngay_Nghi']})")
             
-            btn_xoa = st.button("Xác Nhận Hủy Lịch Nghỉ", type="primary", disabled=la_ngay_khoa)
-            
-            if btn_xoa and not la_ngay_khoa:
-                stt_can_xoa = int(lua_chon_xoa.split(" ")[1])
-                mat_khach_dung = str(df_data.loc[df_data['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
-                
-                if mat_khau_nhap == mat_khach_dung:
-                    df_moi = df_data[df_data['STT'] != stt_can_xoa]
-                    if not df_moi.empty:
-                        df_moi['STT'] = range(1, len(df_moi) + 1)
-                    
-                    list_to_save = df_moi.to_dict(orient="records")
-                    
-                    if save_github_data(list_to_save, sha_data, f"Huy lich STT {stt_can_xoa}"):
-                        st.success("✅ Đã hủy lịch nghỉ phép thành công!")
-                        with st.spinner("🔄 Đang cập nhật lại danh sách công khai..."):
-                            time.sleep(1.5)
-                        st.rerun()  # Chỉ load lại toàn bộ trang khi thực sự xóa thành công để update bảng dữ liệu
-                    else:
-                        st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
-                else:
-                    st.error("❌ Mật khẩu chỉnh sửa không chính xác! Vui lòng kiểm tra lại.")
+        # Thêm key cố định cho selectbox để kiểm soát dữ liệu đồng bộ
+        lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, key="sb_xoa", disabled=la_ngay_khoa)
+        mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
         
-        # Chạy vùng cô lập
-        vung_huy_lich_co_lap(df_list, current_sha)
+        btn_xoa = st.button("Xác Nhận Hủy Lịch Nghỉ", type="primary", disabled=la_ngay_khoa)
+        
+        if btn_xoa and not la_ngay_khoa:
+            stt_can_xoa = int(lua_chon_xoa.split(" ")[1])
+            mat_khach_dung = str(df_list.loc[df_list['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
+            
+            if mat_khau_nhap == mat_khach_dung:
+                df_list = df_list[df_list['STT'] != stt_can_xoa]
+                if not df_list.empty:
+                    df_list['STT'] = range(1, len(df_list) + 1)
+                
+                list_to_save = df_list.to_dict(orient="records")
+                
+                if save_github_data(list_to_save, current_sha, f"Huy lich STT {stt_can_xoa}"):
+                    st.success("✅ Đã hủy lịch nghỉ phép thành công!")
+                    
+                    with st.spinner("🔄 Đang cập nhật lại danh sách công khai..."):
+                        time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
+            else:
+                st.error("❌ Mật khẩu chỉnh sửa không chính xác! Vui lòng kiểm tra lại.")
 
 # --- KHU VỰC HIỂN THỊ BẢNG TỔNG HỢP ---
 st.markdown("---")
