@@ -95,24 +95,56 @@ now_vn = datetime.utcnow() + timedelta(hours=7)
 thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
 la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
-# --- THAY THẾ ST.TABS BẰNG THANH ĐIỀU HƯỚNG CỐ ĐỊNH ---
+# --- THAY THẾ ST.TABS BẰNG THANH ĐIỀU HƯỚNG CỐ ĐỊNH TÙY CHỈNH CSS CỠ LỚN ---
 # Khởi tạo session state cho menu nếu chưa có
 if "menu_selection" not in st.session_state:
     st.session_state["menu_selection"] = "✍️ Đăng Ký Nghỉ Phép"
 
-# Tạo thanh chọn tab nằm ngang cố định bằng st.radio kết hợp style ẩn vòng tròn chọn
-st.write(
-    '<style>div.row-widget.stRadio > div{flex-direction:row;background:#f0f2f6;padding:10px;border-radius:10px;} '
-    'div.row-widget.stRadio div label{background:#ffffff;padding:8px 20px;border-radius:5px;margin-right:10px;box-shadow: 1px 1px 3px rgba(0,0,0,0.1);cursor:pointer;}'
-    'div.row-widget.stRadio div label:hover{background:#fafafa;}</style>', 
+# CSS Tùy chỉnh để phóng to cả Tiêu đề lẫn Nút Radio
+st.markdown(
+    """
+    <style>
+    /* Phóng to Tiêu đề của khối Radio (Chữ "Chọn chức năng:") */
+    div.stRadio > label {
+        font-size: 22px !important;
+        font-weight: bold !important;
+        padding-bottom: 10px;
+    }
+    
+    /* Thiết lập khung nền cho 2 nút bấm */
+    div.row-widget.stRadio > div[role="radiogroup"] {
+        flex-direction: row;
+        background: #f0f2f6;
+        padding: 15px;
+        border-radius: 12px;
+    }
+    
+    /* Phóng to và định dạng lại chữ bên trong các nút bấm */
+    div.row-widget.stRadio > div[role="radiogroup"] label {
+        background: #ffffff;
+        padding: 15px 30px; /* Làm nút to ra (cao x rộng) */
+        border-radius: 8px;
+        margin-right: 15px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        cursor: pointer;
+        font-size: 20px !important; /* Chữ to lên */
+        font-weight: bold !important;
+    }
+    
+    /* Hiệu ứng khi rê chuột vào nút */
+    div.row-widget.stRadio > div[role="radiogroup"] label:hover {
+        background: #e6f2ff;
+    }
+    </style>
+    """, 
     unsafe_allow_html=True
 )
 
 chon_tab = st.radio(
-    "Chọn chức năng:",
+    "📌 Chọn chức năng:",
     options=["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"],
-    key="menu_selection",
-    label_visibility="collapsed"
+    key="menu_selection"
+    # Đã bỏ tham số label_visibility="collapsed" để hiển thị tiêu đề ra ngoài
 )
 
 st.markdown("<br>", unsafe_allow_html=True)
