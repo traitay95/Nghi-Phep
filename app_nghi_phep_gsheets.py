@@ -95,25 +95,32 @@ now_vn = datetime.utcnow() + timedelta(hours=7)
 thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
 la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
-# --- CẤU HÌNH ĐỂ GIỮ CHÂN TAB KHÔNG BỊ NHẢY ---
-# Thiết lập session_state ban đầu nếu chưa có
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "✍️ Đăng Ký Nghỉ Phép"
+# --- THAY THẾ ST.TABS BẰNG THANH ĐIỀU HƯỚNG CỐ ĐỊNH ---
+# Khởi tạo session state cho menu nếu chưa có
+if "menu_selection" not in st.session_state:
+    st.session_state["menu_selection"] = "✍️ Đăng Ký Nghỉ Phép"
 
-# Tạo danh sách tên tab và tìm vị trí tab đang active hiện tại
-tab_titles = ["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"]
-default_index = tab_titles.index(st.session_state["active_tab"])
+# Tạo thanh chọn tab nằm ngang cố định bằng st.radio kết hợp style ẩn vòng tròn chọn
+st.write(
+    '<style>div.row-widget.stRadio > div{flex-direction:row;background:#f0f2f6;padding:10px;border-radius:10px;} '
+    'div.row-widget.stRadio div label{background:#ffffff;padding:8px 20px;border-radius:5px;margin-right:10px;box-shadow: 1px 1px 3px rgba(0,0,0,0.1);cursor:pointer;}'
+    'div.row-widget.stRadio div label:hover{background:#fafafa;}</style>', 
+    unsafe_allow_html=True
+)
 
-# Khởi tạo tabs với giá trị mặc định được lưu lại từ trước
-tabs = st.tabs(tab_titles)
+chon_tab = st.radio(
+    "Chọn chức năng:",
+    options=["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"],
+    key="menu_selection",
+    label_visibility="collapsed"
+)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ==============================================================================
-# TAB 1: ĐĂNG KÝ NGHỈ PHÉP (HỖ TRỢ NHIỀU NGÀY)
+# TAB 1: ĐĂNG KÝ NGHỈ PHÉP
 # ==============================================================================
-with tabs[0]:
-    # Mỗi khi người dùng bấm vào tab này, cập nhật lại trạng thái active
-    st.session_state["active_tab"] = "✍️ Đăng Ký Nghỉ Phép"
-    
+if chon_tab == "✍️ Đăng Ký Nghỉ Phép":
     st.subheader("Điền thông tin đăng ký")
     
     if la_ngay_khoa:
@@ -178,10 +185,7 @@ with tabs[0]:
 # ==============================================================================
 # TAB 2: HỦY ĐĂNG KÝ
 # ==============================================================================
-with tabs[1]:
-    # Ép cố định nếu đang thao tác ở tab 2 thì giá trị lưu trữ phải là tab 2
-    st.session_state["active_tab"] = "❌ Hủy Lịch Nghỉ"
-    
+elif chon_tab == "❌ Hủy Lịch Nghỉ":
     st.subheader("Xóa lịch đăng ký nghỉ phép")
     
     if la_ngay_khoa:
@@ -194,7 +198,8 @@ with tabs[1]:
         for idx, row in df_list.iterrows():
             danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - {row['Ngay_Nghi']})")
             
-        lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, disabled=la_ngay_khoa)
+        # Thêm key cố định cho selectbox để kiểm soát dữ liệu đồng bộ
+        lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, key="sb_xoa", disabled=la_ngay_khoa)
         mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
         
         btn_xoa = st.button("Xác Nhận Hủy Lịch Nghỉ", type="primary", disabled=la_ngay_khoa)
