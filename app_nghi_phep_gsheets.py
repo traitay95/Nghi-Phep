@@ -100,51 +100,58 @@ la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 if "menu_selection" not in st.session_state:
     st.session_state["menu_selection"] = "✍️ Đăng Ký Nghỉ Phép"
 
-# CSS Tùy chỉnh để phóng to cả Tiêu đề lẫn Nút Radio
+# CSS Tùy chỉnh để phóng to cả Tiêu đề lẫn Nút Radio, tạo hiệu ứng như Tab
 st.markdown(
     """
     <style>
-    /* Phóng to Tiêu đề của khối Radio (Chữ "Chọn chức năng:") */
+    /* 1. Phóng to Tiêu đề "Chọn chức năng:" */
     div.stRadio > label {
-        font-size: 40px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
-        padding-bottom: 10px;
+        color: #1f77b4; /* Chữ màu xanh cho nổi bật */
+        padding-bottom: 15px;
     }
     
-    /* Thiết lập khung nền cho 2 nút bấm */
-    div.row-widget.stRadio > div[role="radiogroup"] {
-        flex-direction: row;
-        background: #f0f2f6;
-        padding: 15px;
-        border-radius: 12px;
+    /* 2. Ẩn cái dấu chấm tròn mặc định của Radio đi cho giống nút bấm */
+    div[role="radiogroup"] span[data-baseweb="radio"] {
+        display: none !important;
     }
     
-    /* Phóng to và định dạng lại chữ bên trong các nút bấm */
-    div.row-widget.stRadio > div[role="radiogroup"] label {
-        background: #ffffff;
-        padding: 15px 30px; /* Làm nút to ra (cao x rộng) */
-        border-radius: 8px;
-        margin-right: 15px;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    /* 3. Phóng to chữ bên trong 2 nút tùy chọn */
+    div[role="radiogroup"] label p {
+        font-size: 22px !important; /* Chỉnh cỡ chữ ở đây */
+        font-weight: bold !important;
+        margin: 0px !important;
+    }
+
+    /* 4. Định dạng khung nền của từng nút */
+    div[role="radiogroup"] label {
+        background-color: #f0f2f6;
+        padding: 15px 35px !important; /* Làm nút to ra */
+        border-radius: 12px; /* Bo góc tròn trịa */
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.1); /* Đổ bóng nhẹ */
         cursor: pointer;
-        font-size: 40px !important; /* Chữ to lên */
-        font-weight: bold !important;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
     }
     
-    /* Hiệu ứng khi rê chuột vào nút */
-    div.row-widget.stRadio > div[role="radiogroup"] label:hover {
-        background: #e6f2ff;
+    /* 5. Hiệu ứng khi rê chuột vào nút */
+    div[role="radiogroup"] label:hover {
+        background-color: #e6f2ff;
+        transform: translateY(-2px); /* Hiệu ứng nảy lên nhẹ */
+        border: 2px solid #1f77b4;
     }
     </style>
     """, 
     unsafe_allow_html=True
 )
 
+# THÊM THAM SỐ horizontal=True ĐỂ SẮP XẾP NẰM NGANG
 chon_tab = st.radio(
     "📌 Chọn chức năng:",
     options=["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"],
-    key="menu_selection"
-    # Đã bỏ tham số label_visibility="collapsed" để hiển thị tiêu đề ra ngoài
+    key="menu_selection",
+    horizontal=True 
 )
 
 st.markdown("<br>", unsafe_allow_html=True)
