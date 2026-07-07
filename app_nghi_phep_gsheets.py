@@ -95,11 +95,11 @@ now_vn = datetime.utcnow() + timedelta(hours=7)
 thu_trong_tuan = now_vn.weekday()  # 0: Thứ 2, 4: Thứ 6, ..., 6: Chủ Nhật
 la_ngay_khoa = thu_trong_tuan in [4, 5, 6]  # Khóa vào Thứ 6, 7, CN
 
-# --- SỬ DỤNG LẠI ST.TABS GỐC ---
+# --- DÙNG LẠI ST.TABS GỐC THEO Ý ANH ---
 tab1, tab2 = st.tabs(["✍️ Đăng Ký Nghỉ Phép", "❌ Hủy Lịch Nghỉ"])
 
 # ==============================================================================
-# TAB 1: ĐĂNG KÝ NGHỈ PHÉP (HỖ TRỢ NHIỀU NGÀY)
+# TAB 1: ĐĂNG KÝ NGHỈ PHÉP
 # ==============================================================================
 with tab1:
     st.subheader("Điền thông tin đăng ký")
@@ -156,7 +156,6 @@ with tab1:
                 
                 if save_github_data(list_to_save, current_sha, f"User {ho_ten} dang ky"):
                     st.success(f"🎉 Chúc mừng {ho_ten} đã đăng ký nghỉ phép thành công ({ngay_nghi_str})!")
-                    
                     with st.spinner("🔄 Đang đồng bộ dữ liệu với hệ thống, vui lòng chờ..."):
                         time.sleep(2)
                     st.rerun()
@@ -164,7 +163,7 @@ with tab1:
                     st.error("❌ Lỗi hệ thống khi lưu trữ vào GitHub. Hãy thử lại!")
 
 # ==============================================================================
-# TAB 2: HỦY ĐĂNG KÝ (ÁP DỤNG ST.FRAGMENT ĐỂ KHÔNG BỊ NHẢY TAB)
+# TAB 2: HỦY ĐĂNG KÝ (CÔ LẬP LỖI NHẢY TAB BẰNG ST.FRAGMENT)
 # ==============================================================================
 with tab2:
     st.subheader("Xóa lịch đăng ký nghỉ phép")
@@ -175,14 +174,13 @@ with tab2:
     if df_list.empty:
         st.info("Hiện chưa có ai đăng ký nghỉ phép trong tuần này.")
     else:
-        # Tạo một hàm Fragment độc lập để cô lập hành vi Rerun của Selectbox
+        # Tạo vùng Fragment cô lập tiến trình Rerun của Selectbox
         @st.fragment()
-        def vung_huy_lich(df_hien_tai, sha_hien_tai):
+        def vung_huy_lich_co_lap(df_data, sha_data):
             danh_sach_chon = []
-            for idx, row in df_hien_tai.iterrows():
+            for idx, row in df_data.iterrows():
                 danh_sach_chon.append(f"STT {int(row['STT'])} - {row['Ho_Ten']} ({row['Khoa_Phong']} - {row['Ngay_Nghi']})")
                 
-            # Khi selectbox này thay đổi, nó CHỈ rerun đoạn code bên trong hàm này, không kẹt tới toàn bộ trang
             lua_chon_xoa = st.selectbox("Chọn dòng muốn hủy bỏ:", options=danh_sach_chon, disabled=la_ngay_khoa)
             mat_khau_nhap = st.text_input("Nhập mật khẩu chỉnh sửa của bạn để xác nhận xóa:", type="password", disabled=la_ngay_khoa).strip()
             
@@ -190,28 +188,27 @@ with tab2:
             
             if btn_xoa and not la_ngay_khoa:
                 stt_can_xoa = int(lua_chon_xoa.split(" ")[1])
-                mat_khach_dung = str(df_hien_tai.loc[df_hien_tai['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
+                mat_khach_dung = str(df_data.loc[df_data['STT'] == stt_can_xoa, 'Mat_Khau'].values[0])
                 
                 if mat_khau_nhap == mat_khach_dung:
-                    df_moi = df_hien_tai[df_hien_tai['STT'] != stt_can_xoa]
+                    df_moi = df_data[df_data['STT'] != stt_can_xoa]
                     if not df_moi.empty:
                         df_moi['STT'] = range(1, len(df_moi) + 1)
                     
                     list_to_save = df_moi.to_dict(orient="records")
                     
-                    if save_github_data(list_to_save, sha_hien_tai, f"Huy lich STT {stt_can_xoa}"):
+                    if save_github_data(list_to_save, sha_data, f"Huy lich STT {stt_can_xoa}"):
                         st.success("✅ Đã hủy lịch nghỉ phép thành công!")
                         with st.spinner("🔄 Đang cập nhật lại danh sách công khai..."):
                             time.sleep(1.5)
-                        # Lúc này mới kích hoạt làm mới toàn bộ trang để cập nhật bảng tổng hợp
-                        st.rerun()
+                        st.rerun()  # Chỉ load lại toàn bộ trang khi thực sự xóa thành công để update bảng dữ liệu
                     else:
                         st.error("❌ Không thể đồng bộ xóa lên GitHub. Thử lại sau!")
                 else:
                     st.error("❌ Mật khẩu chỉnh sửa không chính xác! Vui lòng kiểm tra lại.")
         
-        # Gọi hàm fragment ra chạy
-        vung_huy_lich(df_list, current_sha)
+        # Chạy vùng cô lập
+        vung_huy_lich_co_lap(df_list, current_sha)
 
 # --- KHU VỰC HIỂN THỊ BẢNG TỔNG HỢP ---
 st.markdown("---")
