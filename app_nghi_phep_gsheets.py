@@ -106,7 +106,7 @@ st.markdown(
     <style>
     /* Phóng to Tiêu đề của khối Radio (Chữ "Chọn chức năng:") */
     div.stRadio > label {
-        font-size: 22px !important;
+        font-size: 40px !important;
         font-weight: bold !important;
         padding-bottom: 10px;
     }
@@ -127,7 +127,7 @@ st.markdown(
         margin-right: 15px;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
         cursor: pointer;
-        font-size: 20px !important; /* Chữ to lên */
+        font-size: 40px !important; /* Chữ to lên */
         font-weight: bold !important;
     }
     
