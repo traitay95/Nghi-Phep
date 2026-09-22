@@ -1,1 +1,10 @@
-[]
+[
+    {
+        "STT": 1,
+        "Ho_Ten": "tươi",
+        "Khoa_Phong": "kh",
+        "Ngay_Nghi": "30/09/2026",
+        "Mat_Khau": "123",
+        "Ngay_Dang_Ky": "2026-09-22 08:03:19"
+    }
+]
